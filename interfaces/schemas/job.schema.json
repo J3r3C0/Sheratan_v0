@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Job",
+  "type": "object",
+  "properties": {
+    "id": {"type": "string"},
+    "kind": {"type": "string"},
+    "payload": {"type": "object"},
+    "tools": {"type": "array", "items": {"type": "string"}},
+    "budget": {"type": "string", "enum": ["low","medium","high"]}
+  },
+  "required": ["id","kind","payload"]
+}
