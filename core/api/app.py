@@ -6,6 +6,7 @@ from core.orchestrator.router import ModelRouter
 from core.orchestrator.policies import Policy
 from core.orchestrator.tools import ToolRegistry
 from core.memory.vector import InMemoryVS
+from .agents import router as agents_router
 
 app = FastAPI(title="Sheratan API", version="0.1.0")
 
@@ -15,6 +16,9 @@ policy = Policy(name="default")
 vs = InMemoryVS()
 reg = ToolRegistry()
 reg.register('echo', lambda p: { 'ok': True, 'payload': p })
+
+# Mount agents subrouter
+app.include_router(agents_router)
 
 class Job(BaseModel):
     id: str
