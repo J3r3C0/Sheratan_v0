@@ -38,12 +38,17 @@ query_embedding = provider.embed_query("search query")
 ## Installation
 
 ```bash
-# Basic (local embeddings)
+# Basic (no embeddings, provider='off' by default)
 pip install -r requirements.txt
 
+# For local embeddings
+pip install sentence-transformers>=2.7.0
+
 # For OpenAI
-pip install openai
+pip install openai>=1.0.0
 
 # For HuggingFace
-pip install transformers
+pip install transformers>=4.30.0
 ```
+
+**Note**: `sentence-transformers>=2.7.0` is required for compatibility with modern `huggingface-hub` versions.
