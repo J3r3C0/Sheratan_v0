@@ -1,6 +1,7 @@
 """Worker for processing documents: crawl, chunk, embed"""
 import asyncio
 import logging
+import os
 from typing import List, Dict, Any
 from datetime import datetime
 
@@ -13,6 +14,20 @@ class DocumentProcessor:
     
     def __init__(self):
         self.is_running = False
+        self._embedding_provider = None
+        
+    def _get_embedding_provider(self):
+        """Lazy load embedding provider"""
+        if self._embedding_provider is None:
+            try:
+                # Import here to avoid hard dependency
+                from sheratan_embeddings.providers import get_embedding_provider
+                self._embedding_provider = get_embedding_provider()
+                logger.info("Embedding provider initialized")
+            except ImportError:
+                logger.warning("sheratan-embeddings not available, embeddings will be skipped")
+                self._embedding_provider = None
+        return self._embedding_provider
         
     async def crawl(self, url: str) -> Dict[str, Any]:
         """
@@ -73,15 +88,38 @@ class DocumentProcessor:
             List of dicts with chunk and embedding
         """
         logger.info(f"Generating embeddings for {len(chunks)} chunks")
-        # TODO: Use sheratan-embeddings to generate actual embeddings
         
+        provider = self._get_embedding_provider()
         results = []
-        for i, chunk in enumerate(chunks):
-            results.append({
-                "chunk": chunk,
-                "embedding": [],  # Placeholder
-                "index": i
-            })
+        
+        if provider is None:
+            logger.warning("No embedding provider available, returning chunks without embeddings")
+            for i, chunk in enumerate(chunks):
+                results.append({
+                    "chunk": chunk,
+                    "embedding": [],
+                    "index": i
+                })
+        else:
+            try:
+                # Generate embeddings using the provider
+                embeddings = provider.embed(chunks)
+                for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                    results.append({
+                        "chunk": chunk,
+                        "embedding": embedding,
+                        "index": i
+                    })
+                logger.info(f"Successfully generated {len(embeddings)} embeddings")
+            except Exception as e:
+                logger.error(f"Error generating embeddings: {e}")
+                # Fallback to empty embeddings
+                for i, chunk in enumerate(chunks):
+                    results.append({
+                        "chunk": chunk,
+                        "embedding": [],
+                        "index": i
+                    })
         
         return results
     
