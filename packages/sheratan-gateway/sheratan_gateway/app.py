@@ -4,10 +4,31 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Environment variables
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
-EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "local")
+EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "off")
+
+# Lazy-loaded embedding provider
+_embedding_provider = None
+
+
+def get_embedding_provider():
+    """Get embedding provider (lazy-loaded)"""
+    global _embedding_provider
+    if _embedding_provider is None:
+        try:
+            from sheratan_embeddings.providers import get_embedding_provider as _get_provider
+            _embedding_provider = _get_provider()
+            logger.info(f"Embedding provider initialized: {EMBEDDINGS_PROVIDER}")
+        except ImportError:
+            logger.warning("sheratan-embeddings not available")
+            _embedding_provider = None
+    return _embedding_provider
 
 app = FastAPI(
     title="Sheratan Gateway",
@@ -124,14 +145,37 @@ async def search_documents(request: SearchRequest):
     
     Uses embeddings to find most relevant documents
     """
-    # TODO: Query vector store via sheratan-store
-    # For now, return mock response
+    # Get embedding provider
+    provider = get_embedding_provider()
+    embeddings_provider = os.getenv("EMBEDDINGS_PROVIDER", "off")
     
-    return SearchResponse(
-        query=request.query,
-        results=[],
-        total=0
-    )
+    if provider is None or embeddings_provider == "off":
+        logger.warning("Embeddings not available or disabled")
+        return SearchResponse(
+            query=request.query,
+            results=[],
+            total=0
+        )
+    
+    try:
+        # Generate query embedding
+        query_embedding = provider.embed_query(request.query)
+        logger.info(f"Generated query embedding with {len(query_embedding)} dimensions")
+        
+        # TODO: Query vector store via sheratan-store using query_embedding
+        # For now, return mock response
+        
+        return SearchResponse(
+            query=request.query,
+            results=[],
+            total=0
+        )
+    except Exception as e:
+        logger.error(f"Error during search: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}"
+        )
 
 
 @app.post("/answer", response_model=AnswerResponse)
