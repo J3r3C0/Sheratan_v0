@@ -58,7 +58,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/sheratan
 PGVECTOR_ENABLED=true
 
 # Embeddings
-EMBEDDINGS_PROVIDER=local  # local, openai, huggingface
+EMBEDDINGS_PROVIDER=local  # local, openai, huggingface, off
 EMBEDDINGS_MODEL=all-MiniLM-L6-v2
 
 # LLM (optional, standardmäßig deaktiviert)
