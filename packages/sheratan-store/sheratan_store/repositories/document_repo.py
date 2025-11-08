@@ -22,7 +22,7 @@ class DocumentRepository:
         """Create a new document"""
         doc = Document(
             content=content,
-            metadata=metadata or {},
+            metadata_=metadata or {},
             source=source
         )
         self.session.add(doc)
@@ -50,7 +50,7 @@ class DocumentRepository:
             chunk_index=chunk_index,
             content=content,
             embedding=embedding,
-            metadata=metadata or {}
+            metadata_=metadata or {}
         )
         self.session.add(chunk)
         await self.session.flush()
@@ -93,7 +93,7 @@ class DocumentRepository:
                     'document_id': str(chunk.document_id),
                     'content': chunk.content,
                     'score': float(similarity),
-                    'metadata': chunk.metadata
+                    'metadata': chunk.metadata_
                 })
         
         return results
@@ -110,7 +110,7 @@ class DocumentRepository:
             query=query,
             results_count=results_count,
             avg_score=avg_score,
-            metadata=metadata or {}
+            metadata_=metadata or {}
         )
         self.session.add(log)
         await self.session.flush()
