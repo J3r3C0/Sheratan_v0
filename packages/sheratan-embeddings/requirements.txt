@@ -1,0 +1,9 @@
+# Core
+python-dotenv==1.0.0
+
+# Local embeddings
+sentence-transformers==2.2.2
+
+# Optional providers (install as needed)
+# openai>=1.0.0
+# transformers>=4.30.0
