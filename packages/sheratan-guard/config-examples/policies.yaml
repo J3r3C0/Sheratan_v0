@@ -1,0 +1,53 @@
+# Sheratan Guard - Policy Configuration
+# 
+# This file defines security and content policies for the Sheratan system.
+# Policies are evaluated in order and can result in: allow, deny, warn, or redact actions.
+
+policies:
+  # Content validation policies
+  - name: no_empty_content
+    description: Reject requests with empty content
+    action: deny
+    conditions:
+      - field: content
+        operator: empty
+  
+  - name: content_size_warning
+    description: Warn when content exceeds size limit
+    action: warn
+    conditions:
+      - field: content_length
+        operator: greater_than
+        value: 1000000  # 1MB
+  
+  - name: content_size_limit
+    description: Reject content that is too large
+    action: deny
+    conditions:
+      - field: content_length
+        operator: greater_than
+        value: 10000000  # 10MB
+  
+  # Security policies
+  - name: no_spam_content
+    description: Block content with spam indicators
+    action: deny
+    conditions:
+      - field: content
+        operator: contains
+        value: "CLICK HERE NOW"
+  
+  - name: suspicious_patterns
+    description: Warn on suspicious content patterns
+    action: warn
+    conditions:
+      - field: content
+        operator: contains
+        value: "free money"
+  
+  # Rate limiting related (enforced at middleware level)
+  # These are just for documentation, actual limits are in ratelimits.yaml
+  
+  # Add custom policies as needed
+  # Available operators: empty, greater_than, contains, equals
+  # Available actions: allow, deny, warn, redact

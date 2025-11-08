@@ -1,0 +1,65 @@
+# Sheratan Guard - Blocklists Configuration
+#
+# Define blocklists for content filtering.
+# Text is checked case-insensitively against these lists.
+
+blocklists:
+  # Spam keywords that should be blocked
+  spam_keywords:
+    - viagra
+    - cialis
+    - casino
+    - lottery
+    - prize winner
+    - claim your prize
+    - click here
+    - limited time
+    - act now
+    - congratulations you won
+    - free money
+    - get rich quick
+    - work from home
+    - make money fast
+    - weight loss miracle
+    - enlarge
+    - buy now
+    - order now
+    - subscribe now
+  
+  # Offensive or inappropriate terms
+  # Add context-specific terms as needed
+  offensive_terms:
+    # Add terms specific to your use case
+    # Be careful with overly broad blocking
+  
+  # Suspicious domains or URLs
+  suspicious_domains:
+    - malicious-site.com
+    - spam-domain.net
+    - phishing-example.org
+    - suspicious-url.xyz
+  
+  # Technical attack patterns
+  attack_patterns:
+    - "<script>"
+    - "javascript:"
+    - "onerror="
+    - "eval("
+    - "base64_decode"
+    - "system("
+    - "exec("
+    - "../../../"
+    - "DROP TABLE"
+    - "'; DROP"
+  
+  # Data exfiltration patterns
+  exfiltration_patterns:
+    - "curl http"
+    - "wget http"
+    - "powershell -"
+    - "cmd.exe"
+    - "/etc/passwd"
+    - "/etc/shadow"
+  
+  # Add custom blocklists as needed
+  # Each blocklist can be checked independently in your application

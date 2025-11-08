@@ -1,0 +1,47 @@
+# Sheratan Guard - Rate Limits Configuration
+#
+# Define rate limits for different endpoints.
+# Limits are enforced per client (based on IP address).
+
+rate_limits:
+  # Global rate limit (applied to all endpoints without specific limits)
+  global:
+    requests_per_minute: 100
+    requests_per_hour: 1000
+  
+  # Document ingestion endpoint
+  /ingest:
+    requests_per_minute: 10
+    requests_per_hour: 100
+    # Reason: Ingestion is resource-intensive
+  
+  # Search endpoint
+  /search:
+    requests_per_minute: 60
+    requests_per_hour: 600
+    # Reason: Search is moderately resource-intensive
+  
+  # RAG answer endpoint
+  /answer:
+    requests_per_minute: 20
+    requests_per_hour: 200
+    # Reason: LLM calls are expensive and slow
+  
+  # Health check endpoint (no strict limit)
+  /health:
+    requests_per_minute: 300
+    requests_per_hour: 3000
+    # Reason: Health checks should be fast and frequent
+  
+  # Root endpoint
+  /:
+    requests_per_minute: 200
+    requests_per_hour: 2000
+    # Reason: Informational endpoint, minimal load
+
+# Notes:
+# - Limits are enforced per unique client (IP address)
+# - Exceeding limits returns HTTP 429 (Too Many Requests)
+# - Response headers include current usage and remaining quota
+# - Limits are checked in-memory (resets on server restart)
+# - For production, consider using Redis for distributed rate limiting

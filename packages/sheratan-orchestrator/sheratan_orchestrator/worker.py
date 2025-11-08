@@ -1,11 +1,28 @@
 """Worker for processing documents: crawl, chunk, embed"""
 import asyncio
 import logging
+import os
+import sys
 from typing import List, Dict, Any
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Guard
+GUARD_ENABLED = os.getenv("GUARD_ENABLED", "true").lower() == "true"
+guard_middleware = None
+
+if GUARD_ENABLED:
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../sheratan-guard"))
+        from sheratan_guard import GuardMiddleware, AuditEventType
+        
+        guard_middleware = GuardMiddleware(enabled=True)
+        logger.info("Guard middleware enabled in orchestrator")
+    except Exception as e:
+        logger.warning(f"Failed to initialize guard middleware in orchestrator: {e}")
+        GUARD_ENABLED = False
 
 
 class DocumentProcessor:
@@ -43,19 +60,26 @@ class DocumentProcessor:
             overlap: Overlap between chunks
             
         Returns:
-            List of text chunks
+            List of text chunks (with PII scrubbed if guard is enabled)
         """
         logger.info(f"Chunking content (size: {len(content)})")
         
         if not content:
             return []
         
+        # Scrub PII from content before chunking
+        scrubbed_content = content
+        if guard_middleware:
+            scrubbed_content = guard_middleware.scrub_pii(content)
+            if scrubbed_content != content:
+                logger.info("PII detected and scrubbed from content before chunking")
+        
         chunks = []
         start = 0
         
-        while start < len(content):
+        while start < len(scrubbed_content):
             end = start + chunk_size
-            chunk = content[start:end]
+            chunk = scrubbed_content[start:end]
             chunks.append(chunk)
             start = end - overlap
             
