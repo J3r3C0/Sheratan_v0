@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sheratan-postgres
+    environment:
+      POSTGRES_USER: sheratan
+      POSTGRES_PASSWORD: sheratan
+      POSTGRES_DB: sheratan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheratan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    build:
+      context: ./packages/sheratan-gateway
+      dockerfile: Dockerfile
+    container_name: sheratan-gateway
+    environment:
+      DATABASE_URL: postgresql://sheratan:sheratan@postgres:5432/sheratan
+      EMBEDDINGS_PROVIDER: local
+      LLM_ENABLED: "false"
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./packages/sheratan-gateway:/app
+    command: uvicorn sheratan_gateway.app:app --host 0.0.0.0 --port 8000 --reload
+
+  orchestrator:
+    build:
+      context: ./packages/sheratan-orchestrator
+      dockerfile: Dockerfile
+    container_name: sheratan-orchestrator
+    environment:
+      DATABASE_URL: postgresql://sheratan:sheratan@postgres:5432/sheratan
+      EMBEDDINGS_PROVIDER: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./packages/sheratan-orchestrator:/app
+
+volumes:
+  postgres_data:
