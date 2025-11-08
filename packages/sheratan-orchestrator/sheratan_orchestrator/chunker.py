@@ -1,6 +1,6 @@
 """Chunking module for splitting text into manageable pieces"""
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 
 logger = logging.getLogger(__name__)
