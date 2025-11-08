@@ -103,6 +103,23 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
         return self.provider.embed_query(query)
 
 
+class OffEmbeddingProvider(EmbeddingProvider):
+    """Disabled embeddings provider - returns empty embeddings"""
+    
+    def __init__(self):
+        logger.warning("Embeddings are disabled (provider='off')")
+    
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        """Returns empty embeddings for all texts"""
+        logger.warning("Embeddings disabled - returning empty vectors")
+        return [[] for _ in texts]
+    
+    def embed_query(self, query: str) -> List[float]:
+        """Returns empty embedding for query"""
+        logger.warning("Embeddings disabled - returning empty vector")
+        return []
+
+
 def get_embedding_provider(
     provider: Optional[str] = None,
     model: Optional[str] = None
@@ -111,19 +128,22 @@ def get_embedding_provider(
     Factory function to get embedding provider based on ENV or parameters
     
     Args:
-        provider: Provider name ('local', 'openai', 'huggingface'). 
-                  Defaults to EMBEDDINGS_PROVIDER env var or 'local'
+        provider: Provider name ('local', 'openai', 'huggingface', 'off'). 
+                  Defaults to EMBEDDINGS_PROVIDER env var or 'off'
         model: Model name. Defaults to EMBEDDINGS_MODEL env var or provider default
         
     Returns:
         EmbeddingProvider instance
     """
-    provider = provider or os.getenv("EMBEDDINGS_PROVIDER", "local")
+    provider = provider or os.getenv("EMBEDDINGS_PROVIDER", "off")
     model = model or os.getenv("EMBEDDINGS_MODEL")
     
     logger.info(f"Creating embedding provider: {provider}")
     
-    if provider == "local":
+    if provider == "off":
+        return OffEmbeddingProvider()
+    
+    elif provider == "local":
         model = model or "all-MiniLM-L6-v2"
         return LocalEmbeddingProvider(model_name=model)
     
