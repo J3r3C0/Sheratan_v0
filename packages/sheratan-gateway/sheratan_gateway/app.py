@@ -1,18 +1,49 @@
 """FastAPI Application for Sheratan Gateway"""
 import os
-from fastapi import FastAPI, HTTPException, status
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .auth import (
+    get_current_active_user, 
+    User, 
+    create_access_token,
+    JWT_SECRET_KEY,
+    API_KEYS
+)
+from .db import get_db, init_db, close_db
 
 # Environment variables
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
 EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "local")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sheratan:sheratan@localhost:5432/sheratan")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    try:
+        await init_db()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+    
+    yield
+    
+    # Shutdown
+    await close_db()
+
 
 app = FastAPI(
     title="Sheratan Gateway",
     version="0.1.0",
-    description="REST API for document ingestion, search, and RAG-based answers"
+    description="REST API for document ingestion, search, and RAG-based answers",
+    lifespan=lifespan
 )
 
 
@@ -74,6 +105,32 @@ class AnswerResponse(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class TokenRequest(BaseModel):
+    """Request for authentication token"""
+    username: str
+    password: str = Field(default="")  # Simplified for now
+
+
+class TokenResponse(BaseModel):
+    """Response with access token"""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class AdminInfo(BaseModel):
+    """Admin endpoint information"""
+    service: str
+    version: str
+    status: str
+    database_url: str
+    embeddings_provider: str
+    llm_enabled: bool
+    auth_configured: bool
+    api_keys_count: int
+    timestamp: str
+
+
 # Endpoints
 @app.get("/")
 async def root():
@@ -90,14 +147,92 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "llm_enabled": LLM_ENABLED,
         "embeddings_provider": EMBEDDINGS_PROVIDER
     }
 
 
+@app.post("/auth/token", response_model=TokenResponse)
+async def login(request: TokenRequest):
+    """
+    Get JWT access token
+    
+    Simple authentication endpoint that generates a JWT token.
+    In production, validate credentials against a user database.
+    
+    Args:
+        request: Username and password
+    
+    Returns:
+        JWT access token
+    """
+    # TODO: Validate credentials against database
+    # For now, accept any username
+    if not request.username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is required"
+        )
+    
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={"sub": request.username},
+        expires_delta=access_token_expires
+    )
+    
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=30 * 60  # 30 minutes in seconds
+    )
+
+
+@app.get("/admin", response_model=AdminInfo)
+async def admin_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Admin endpoint with system information
+    
+    Provides system status, configuration, and health information.
+    Requires authentication.
+    
+    Returns:
+        System information and status
+    """
+    # Mask sensitive parts of DATABASE_URL
+    db_url_masked = DATABASE_URL
+    if "@" in db_url_masked:
+        # Hide password in DATABASE_URL
+        parts = db_url_masked.split("@")
+        credentials_part = parts[0]
+        if ":" in credentials_part:
+            user_pass = credentials_part.split("://")[1]
+            user = user_pass.split(":")[0]
+            db_url_masked = f"postgresql://{user}:***@{parts[1]}"
+    
+    auth_configured = bool(API_KEYS) or JWT_SECRET_KEY != "dev-secret-key-change-in-production"
+    
+    return AdminInfo(
+        service="Sheratan Gateway",
+        version="0.1.0",
+        status="running",
+        database_url=db_url_masked,
+        embeddings_provider=EMBEDDINGS_PROVIDER,
+        llm_enabled=LLM_ENABLED,
+        auth_configured=auth_configured,
+        api_keys_count=len(API_KEYS) if API_KEYS else 0,
+        timestamp=datetime.now(timezone.utc).isoformat()
+    )
+
+
 @app.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_201_CREATED)
-async def ingest_documents(request: IngestRequest):
+async def ingest_documents(
+    request: IngestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Ingest documents for indexing
     
@@ -105,6 +240,8 @@ async def ingest_documents(request: IngestRequest):
     - Chunking
     - Embedding generation
     - Storage in vector database
+    
+    Requires authentication.
     """
     # TODO: Send to orchestrator queue
     # For now, return mock response
@@ -118,11 +255,17 @@ async def ingest_documents(request: IngestRequest):
 
 
 @app.post("/search", response_model=SearchResponse)
-async def search_documents(request: SearchRequest):
+async def search_documents(
+    request: SearchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Perform semantic search across indexed documents
     
     Uses embeddings to find most relevant documents
+    
+    Requires authentication.
     """
     # TODO: Query vector store via sheratan-store
     # For now, return mock response
@@ -135,11 +278,16 @@ async def search_documents(request: SearchRequest):
 
 
 @app.post("/answer", response_model=AnswerResponse)
-async def answer_question(request: AnswerRequest):
+async def answer_question(
+    request: AnswerRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Generate RAG-based answer to a question
     
     Requires LLM to be enabled (LLM_ENABLED=true)
+    Requires authentication.
     """
     if not LLM_ENABLED:
         raise HTTPException(
