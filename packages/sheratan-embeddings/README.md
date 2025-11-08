@@ -4,14 +4,16 @@ Local CPU-based embeddings with provider switching via environment variables.
 
 ## Features
 
-- **Local Provider**: CPU-based embeddings using sentence-transformers (default)
+- **Off Provider**: Embeddings disabled (default)
+- **Local Provider**: CPU-based embeddings using sentence-transformers
 - **OpenAI Provider**: OpenAI API embeddings (requires API key)
 - **HuggingFace Provider**: HuggingFace Hub models
 
 ## Environment Variables
 
-- `EMBEDDINGS_PROVIDER` - Provider to use (local, openai, huggingface). Default: local
+- `EMBEDDINGS_PROVIDER` - Provider to use (off, local, openai, huggingface). Default: off
 - `EMBEDDINGS_MODEL` - Model name. Defaults depend on provider:
+  - off: N/A (no model loaded)
   - local: all-MiniLM-L6-v2
   - openai: text-embedding-ada-002
   - huggingface: sentence-transformers/all-MiniLM-L6-v2
@@ -36,12 +38,17 @@ query_embedding = provider.embed_query("search query")
 ## Installation
 
 ```bash
-# Basic (local embeddings)
+# Basic (no embeddings, provider='off' by default)
 pip install -r requirements.txt
 
+# For local embeddings
+pip install sentence-transformers>=2.7.0
+
 # For OpenAI
-pip install openai
+pip install openai>=1.0.0
 
 # For HuggingFace
-pip install transformers
+pip install transformers>=4.30.0
 ```
+
+**Note**: `sentence-transformers>=2.7.0` is required for compatibility with modern `huggingface-hub` versions.

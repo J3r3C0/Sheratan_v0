@@ -1,18 +1,42 @@
 """Worker for processing documents: crawl, chunk, embed"""
 import asyncio
 import logging
+import os
+from dotenv import load_dotenv
 from typing import List, Dict, Any
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
+from .job_manager import JobManager
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO")
+logging.basicConfig(
+    level=getattr(logging, log_level),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
-
-
 class DocumentProcessor:
     """Processes documents through crawl, chunk, embed pipeline"""
     
     def __init__(self):
         self.is_running = False
+        self._embedding_provider = None
+        
+    def _get_embedding_provider(self):
+        """Lazy load embedding provider"""
+        if self._embedding_provider is None:
+            try:
+                # Import here to avoid hard dependency
+                from sheratan_embeddings.providers import get_embedding_provider
+                self._embedding_provider = get_embedding_provider()
+                logger.info("Embedding provider initialized")
+            except ImportError:
+                logger.warning("sheratan-embeddings not available, embeddings will be skipped")
+                self._embedding_provider = None
+        return self._embedding_provider
         
     async def crawl(self, url: str) -> Dict[str, Any]:
         """
@@ -73,15 +97,38 @@ class DocumentProcessor:
             List of dicts with chunk and embedding
         """
         logger.info(f"Generating embeddings for {len(chunks)} chunks")
-        # TODO: Use sheratan-embeddings to generate actual embeddings
         
+        provider = self._get_embedding_provider()
         results = []
-        for i, chunk in enumerate(chunks):
-            results.append({
-                "chunk": chunk,
-                "embedding": [],  # Placeholder
-                "index": i
-            })
+        
+        if provider is None:
+            logger.warning("No embedding provider available, returning chunks without embeddings")
+            for i, chunk in enumerate(chunks):
+                results.append({
+                    "chunk": chunk,
+                    "embedding": [],
+                    "index": i
+                })
+        else:
+            try:
+                # Generate embeddings using the provider
+                embeddings = provider.embed(chunks)
+                for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                    results.append({
+                        "chunk": chunk,
+                        "embedding": embedding,
+                        "index": i
+                    })
+                logger.info(f"Successfully generated {len(embeddings)} embeddings")
+            except Exception as e:
+                logger.error(f"Error generating embeddings: {e}")
+                # Fallback to empty embeddings
+                for i, chunk in enumerate(chunks):
+                    results.append({
+                        "chunk": chunk,
+                        "embedding": [],
+                        "index": i
+                    })
         
         return results
     
@@ -152,11 +199,24 @@ class DocumentProcessor:
 
 async def main():
     """Entry point for worker"""
-    processor = DocumentProcessor()
+    logger.info("Starting Sheratan Orchestrator Worker")
+    
+    # Configuration from environment
+    poll_interval = int(os.getenv("JOB_POLL_INTERVAL", "5"))
+    max_concurrent = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
+    
+    # Create and start job manager
+    manager = JobManager(
+        poll_interval=poll_interval,
+        max_concurrent_jobs=max_concurrent
+    )
+    
     try:
-        await processor.run()
+        await manager.start()
     except KeyboardInterrupt:
-        processor.stop()
+        logger.info("Received shutdown signal")
+    finally:
+        await manager.stop()
         logger.info("Worker stopped")
 
 
