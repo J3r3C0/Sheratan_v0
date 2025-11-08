@@ -60,8 +60,8 @@ class Job(Base):
     heartbeat_at = Column(DateTime(timezone=True))  # Last heartbeat timestamp
     lease_expires_at = Column(DateTime(timezone=True))  # When the job lease expires
     
-    # Metadata
-    metadata = Column(JSON, default={})
+    # Metadata - renamed to avoid SQLAlchemy reserved attribute
+    job_metadata = Column(JSON, default={})
     
     def __repr__(self):
         return f"<Job {self.id} {self.job_type} {self.status}>"
