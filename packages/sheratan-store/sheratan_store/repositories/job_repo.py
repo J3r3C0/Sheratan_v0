@@ -337,3 +337,155 @@ class JobRepository:
         
         await self.session.flush()
         return len(jobs_to_delete)
+    
+    async def update_heartbeat(
+        self,
+        job: Job,
+        lease_duration_seconds: int = 300
+    ) -> Job:
+        """
+        Update job heartbeat and extend lease
+        
+        Args:
+            job: Job to update
+            lease_duration_seconds: Duration of the lease in seconds (default 5 minutes)
+            
+        Returns:
+            Updated job
+        """
+        now = datetime.utcnow()
+        job.heartbeat_at = now
+        job.lease_expires_at = now + timedelta(seconds=lease_duration_seconds)
+        
+        await self.session.flush()
+        return job
+    
+    async def acquire_job_lease(
+        self,
+        job: Job,
+        worker_id: str,
+        lease_duration_seconds: int = 300
+    ) -> Job:
+        """
+        Acquire a lease on a job for a specific worker
+        
+        Args:
+            job: Job to acquire lease on
+            worker_id: Unique identifier of the worker
+            lease_duration_seconds: Duration of the lease in seconds (default 5 minutes)
+            
+        Returns:
+            Updated job with lease
+        """
+        now = datetime.utcnow()
+        job.worker_id = worker_id
+        job.heartbeat_at = now
+        job.lease_expires_at = now + timedelta(seconds=lease_duration_seconds)
+        job.started_at = now if not job.started_at else job.started_at
+        
+        await self.session.flush()
+        return job
+    
+    async def release_job_lease(self, job: Job) -> Job:
+        """
+        Release the lease on a job
+        
+        Args:
+            job: Job to release lease from
+            
+        Returns:
+            Updated job
+        """
+        job.worker_id = None
+        job.heartbeat_at = None
+        job.lease_expires_at = None
+        
+        await self.session.flush()
+        return job
+    
+    async def get_zombie_jobs(
+        self,
+        lease_grace_period_seconds: int = 60
+    ) -> list[Job]:
+        """
+        Find zombie jobs (running jobs with expired leases)
+        
+        Args:
+            lease_grace_period_seconds: Additional grace period beyond lease expiration (default 60s)
+            
+        Returns:
+            List of zombie jobs
+        """
+        now = datetime.utcnow()
+        grace_cutoff = now - timedelta(seconds=lease_grace_period_seconds)
+        
+        result = await self.session.execute(
+            select(Job)
+            .where(
+                and_(
+                    Job.status == JobStatus.RUNNING,
+                    Job.lease_expires_at.isnot(None),
+                    Job.lease_expires_at < grace_cutoff
+                )
+            )
+            .with_for_update(skip_locked=True)
+        )
+        
+        return list(result.scalars().all())
+    
+    async def recover_zombie_job(
+        self,
+        job: Job,
+        retry: bool = True
+    ) -> Job:
+        """
+        Recover a zombie job by resetting it for retry or marking as failed
+        
+        Args:
+            job: Zombie job to recover
+            retry: If True, reset to PENDING for retry; if False, mark as FAILED
+            
+        Returns:
+            Recovered job
+        """
+        # Release the lease
+        job.worker_id = None
+        job.heartbeat_at = None
+        job.lease_expires_at = None
+        
+        if retry and job.can_retry():
+            # Reset to pending for retry
+            job.status = JobStatus.PENDING
+            job.retry_count += 1
+            job.error_message = f"Job recovered from zombie state. Previous worker may have crashed."
+        else:
+            # Mark as failed
+            job.status = JobStatus.FAILED
+            job.completed_at = datetime.utcnow()
+            job.error_message = f"Job failed: worker crashed and max retries exceeded"
+        
+        await self.session.flush()
+        return job
+    
+    async def check_cancellation_requested(self, job_id: uuid.UUID) -> bool:
+        """
+        Check if cancellation has been requested for a job
+        
+        This is called periodically by running jobs to check if they should stop.
+        
+        Args:
+            job_id: Job ID to check
+            
+        Returns:
+            True if job status is CANCELLED, False otherwise
+        """
+        result = await self.session.execute(
+            select(Job.status)
+            .where(Job.id == job_id)
+        )
+        row = result.first()
+        
+        if not row:
+            return False
+        
+        return row[0] == JobStatus.CANCELLED

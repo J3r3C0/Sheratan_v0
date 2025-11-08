@@ -55,6 +55,11 @@ class Job(Base):
     completed_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    # Worker tracking and heartbeat for zombie detection
+    worker_id = Column(String(255))  # Unique identifier of the worker processing this job
+    heartbeat_at = Column(DateTime(timezone=True))  # Last heartbeat timestamp
+    lease_expires_at = Column(DateTime(timezone=True))  # When the job lease expires
+    
     # Metadata
     metadata = Column(JSON, default={})
     
@@ -81,3 +86,23 @@ class Job(Base):
         """Mark job for retry"""
         self.status = JobStatus.RETRYING
         self.retry_count += 1
+    
+    def is_lease_expired(self) -> bool:
+        """
+        Check if the job lease has expired
+        
+        Returns:
+            True if lease has expired, False otherwise
+        """
+        if not self.lease_expires_at:
+            return False
+        return datetime.utcnow() >= self.lease_expires_at
+    
+    def can_be_cancelled(self) -> bool:
+        """
+        Check if job can be cancelled
+        
+        Returns:
+            True if job is in a cancellable state
+        """
+        return self.status in [JobStatus.PENDING, JobStatus.RUNNING]
