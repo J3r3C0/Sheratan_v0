@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sheratan-embeddings"
+version = "0.1.0"
+description = "Sheratan embeddings providers (local, OpenAI, HF); ENV-switchable"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "J3r3C0" }]
+keywords = ["embeddings", "nlp", "sentence-transformers", "openai", "huggingface"]
+
+dependencies = [
+  "sentence-transformers>=2.2.2",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0.0"]
+dev = [
+  "pytest>=7",
+  "ruff>=0.5",
+  "black>=24.0",
+  "mypy>=1.9",
+  "types-setuptools",
+]
+
+[project.urls]
+Homepage = "https://github.com/J3r3C0/Sheratan_v0"
+Repository = "https://github.com/J3r3C0/Sheratan_v0"
+
+[tool.setuptools]
+packages = ["sheratan_embeddings"]
