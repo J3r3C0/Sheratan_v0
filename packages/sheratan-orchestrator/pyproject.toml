@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sheratan-orchestrator"
+version = "0.1.0"
+description = "Sheratan ETL job orchestrator"
+requires-python = ">=3.10"
+authors = [{ name = "J3r3C0" }]
+# Keep dependencies minimal for PoC; core orchestrator modules may declare their own.
+dependencies = []
+
+[tool.setuptools]
+packages = ["sheratan_orchestrator"]
