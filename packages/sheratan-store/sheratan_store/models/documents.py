@@ -48,29 +48,6 @@ class DocumentChunk(Base):
     )
 
 
-class Job(Base):
-    """Background job tracking"""
-    __tablename__ = "jobs"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_type = Column(String(50), nullable=False)  # e.g., 'ingest', 'embed', 'crawl'
-    status = Column(String(20), nullable=False, default='pending')  # pending, running, completed, failed
-    payload = Column(JSON, default={})  # Job input data
-    result = Column(JSON)  # Job output data
-    error_message = Column(Text)
-    priority = Column(Integer, default=0)  # Higher number = higher priority
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    started_at = Column(DateTime(timezone=True))
-    completed_at = Column(DateTime(timezone=True))
-    
-    __table_args__ = (
-        Index('idx_jobs_status', 'status'),
-        Index('idx_jobs_type', 'job_type'),
-        Index('idx_jobs_created', 'created_at'),
-        Index('idx_jobs_priority', 'priority', 'created_at'),
-    )
-
-
 class AuditLog(Base):
     """Audit log for security and compliance"""
     __tablename__ = "audit_logs"
