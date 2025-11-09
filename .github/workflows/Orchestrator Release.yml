@@ -1,0 +1,41 @@
+name: Orchestrator Release
+
+on:
+  push:
+    tags:
+      - "orchestrator-v*"
+
+jobs:
+  build-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          cd packages/sheratan-orchestrator
+          python -m build
+          dir dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/sheratan-orchestrator/dist/*.whl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional PyPI publishing (uncomment if desired and add secret PYPI_API_TOKEN)
+      # - name: Publish to PyPI
+      #   run: |
+      #     python -m pip install twine
+      #     python -m twine upload packages/sheratan-orchestrator/dist/*
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
