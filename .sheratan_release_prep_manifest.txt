@@ -1,0 +1,10 @@
+﻿CHANGELOG_APPEND.md
+README_ADDENDUM_RELEASE.md
+.github\workflows\ci.yml
+config\.env.example.additions
+docs\RELEASE_NOTES_v0.1.0.md
+scripts\ci_migrate.ps1
+scripts\ci_migrate.sh
+scripts\print_config.py
+sheratan\config\settings_release.py
+tests\test_cancel_lease_skeleton.py
