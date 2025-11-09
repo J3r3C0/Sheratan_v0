@@ -1,0 +1,61 @@
+name: Orchestrator CI
+
+on:
+  push:
+    branches:
+      - main
+      - poc/recovery-heartbeat-cancel
+  pull_request:
+    paths:
+      - "packages/sheratan-orchestrator/**"
+      - ".github/workflows/orchestrator-ci.yml"
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install orchestrator (editable) + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e packages/sheratan-orchestrator[dev]
+
+      - name: Lint (ruff)
+        run: |
+          python -m ruff check packages/sheratan-orchestrator
+
+      - name: Format check (black)
+        run: |
+          python -m black --check packages/sheratan-orchestrator
+
+      - name: Type check (mypy)
+        run: |
+          python -m mypy packages/sheratan-orchestrator || echo "mypy warnings ignored"
+
+      - name: Tests
+        run: |
+          python -m pytest -q
+
+      - name: Build wheel
+        run: |
+          python -m pip install build
+          cd packages/sheratan-orchestrator
+          python -m build
+          dir dist
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheratan-orchestrator-dist-${{ matrix.python-version }}
+          path: packages/sheratan-orchestrator/dist/*.whl
