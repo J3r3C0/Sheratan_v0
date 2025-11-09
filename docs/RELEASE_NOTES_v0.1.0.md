@@ -11,4 +11,4 @@
 - `metadata` → `job_metadata` (Breaking – Downstream anpassen)
 
 ## Ops
-- HEARTBEAT_INTERVAL (default 30 s) & LEASE_DURATION (default 300 s) via Env konfigurierbar
+- HEARTBEAT_INTERVAL (default 30 s) & LEASE_DURATION (default 300 s) via Env konfigurierbar.

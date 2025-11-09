@@ -1,15 +1,3 @@
-"""Job repository for background task management"""
-from typing import List, Optional, Dict, Any
-from sqlalchemy import select, and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
-from datetime import datetime
-
-from ..models.documents import Job
-
-
-class JobRepository:
-    """Repository for job operations"""
 """Repository for job queue operations"""
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -28,18 +16,6 @@ class JobRepository:
     
     async def create_job(
         self,
-        job_type: str,
-        payload: Dict[str, Any],
-        priority: int = 0,
-        status: str = "pending"
-    ) -> Job:
-        """Create a new job"""
-        job = Job(
-            job_type=job_type,
-            status=status,
-            payload=payload,
-            priority=priority
-        )
         job_type: JobType,
         input_data: dict,
         priority: int = 0,
@@ -69,14 +45,13 @@ class JobRepository:
             priority=priority,
             scheduled_at=scheduled_at,
             max_retries=max_retries,
-            metadata=metadata or {}
+            job_metadata=metadata or {}
         )
         
         self.session.add(job)
         await self.session.flush()
         return job
     
-    async def get_job(self, job_id: UUID) -> Optional[Job]:
     async def get_job(self, job_id: uuid.UUID) -> Optional[Job]:
         """Get job by ID"""
         result = await self.session.execute(
@@ -84,53 +59,6 @@ class JobRepository:
         )
         return result.scalar_one_or_none()
     
-    async def update_job_status(
-        self,
-        job_id: UUID,
-        status: str,
-        result: Optional[Dict[str, Any]] = None,
-        error_message: Optional[str] = None
-    ) -> Optional[Job]:
-        """Update job status and optionally set result or error"""
-        job = await self.get_job(job_id)
-        if not job:
-            return None
-        
-        job.status = status
-        if result is not None:
-            job.result = result
-        if error_message is not None:
-            job.error_message = error_message
-        
-        # Update timestamps based on status
-        if status == "running" and not job.started_at:
-            job.started_at = datetime.utcnow()
-        elif status in ("completed", "failed"):
-            job.completed_at = datetime.utcnow()
-        
-        await self.session.flush()
-        return job
-    
-    async def get_pending_jobs(
-        self,
-        job_types: Optional[List[str]] = None,
-        limit: int = 10
-    ) -> List[Job]:
-        """Get pending jobs ordered by priority and creation time"""
-        query = select(Job).where(Job.status == "pending")
-        
-        if job_types:
-            query = query.where(Job.job_type.in_(job_types))
-        
-        query = query.order_by(Job.priority.desc(), Job.created_at.asc()).limit(limit)
-        
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-    
-    async def get_jobs_by_status(
-        self,
-        status: str,
-        limit: int = 100
     async def get_next_pending_job(self) -> Optional[Job]:
         """
         Get the next pending job to process
@@ -240,33 +168,6 @@ class JobRepository:
         )
         return list(result.scalars().all())
     
-    async def cleanup_old_jobs(
-        self,
-        days: int = 30,
-        statuses: Optional[List[str]] = None
-    ) -> int:
-        """Delete old completed/failed jobs"""
-        from datetime import timedelta
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        
-        query = select(Job).where(
-            Job.created_at < cutoff_date
-        )
-        
-        if statuses:
-            query = query.where(Job.status.in_(statuses))
-        else:
-            query = query.where(Job.status.in_(["completed", "failed"]))
-        
-        result = await self.session.execute(query)
-        jobs = result.scalars().all()
-        
-        count = len(jobs)
-        for job in jobs:
-            await self.session.delete(job)
-        
-        await self.session.flush()
-        return count
     async def retry_job(self, job: Job) -> Job:
         """Retry a failed job"""
         if not job.can_retry():
@@ -337,3 +238,155 @@ class JobRepository:
         
         await self.session.flush()
         return len(jobs_to_delete)
+    
+    async def update_heartbeat(
+        self,
+        job: Job,
+        lease_duration_seconds: int = 300
+    ) -> Job:
+        """
+        Update job heartbeat and extend lease
+        
+        Args:
+            job: Job to update
+            lease_duration_seconds: Duration of the lease in seconds (default 5 minutes)
+            
+        Returns:
+            Updated job
+        """
+        now = datetime.utcnow()
+        job.heartbeat_at = now
+        job.lease_expires_at = now + timedelta(seconds=lease_duration_seconds)
+        
+        await self.session.flush()
+        return job
+    
+    async def acquire_job_lease(
+        self,
+        job: Job,
+        worker_id: str,
+        lease_duration_seconds: int = 300
+    ) -> Job:
+        """
+        Acquire a lease on a job for a specific worker
+        
+        Args:
+            job: Job to acquire lease on
+            worker_id: Unique identifier of the worker
+            lease_duration_seconds: Duration of the lease in seconds (default 5 minutes)
+            
+        Returns:
+            Updated job with lease
+        """
+        now = datetime.utcnow()
+        job.worker_id = worker_id
+        job.heartbeat_at = now
+        job.lease_expires_at = now + timedelta(seconds=lease_duration_seconds)
+        job.started_at = now if not job.started_at else job.started_at
+        
+        await self.session.flush()
+        return job
+    
+    async def release_job_lease(self, job: Job) -> Job:
+        """
+        Release the lease on a job
+        
+        Args:
+            job: Job to release lease from
+            
+        Returns:
+            Updated job
+        """
+        job.worker_id = None
+        job.heartbeat_at = None
+        job.lease_expires_at = None
+        
+        await self.session.flush()
+        return job
+    
+    async def get_zombie_jobs(
+        self,
+        lease_grace_period_seconds: int = 60
+    ) -> list[Job]:
+        """
+        Find zombie jobs (running jobs with expired leases)
+        
+        Args:
+            lease_grace_period_seconds: Additional grace period beyond lease expiration (default 60s)
+            
+        Returns:
+            List of zombie jobs
+        """
+        now = datetime.utcnow()
+        grace_cutoff = now - timedelta(seconds=lease_grace_period_seconds)
+        
+        result = await self.session.execute(
+            select(Job)
+            .where(
+                and_(
+                    Job.status == JobStatus.RUNNING,
+                    Job.lease_expires_at.isnot(None),
+                    Job.lease_expires_at < grace_cutoff
+                )
+            )
+            .with_for_update(skip_locked=True)
+        )
+        
+        return list(result.scalars().all())
+    
+    async def recover_zombie_job(
+        self,
+        job: Job,
+        retry: bool = True
+    ) -> Job:
+        """
+        Recover a zombie job by resetting it for retry or marking as failed
+        
+        Args:
+            job: Zombie job to recover
+            retry: If True, reset to PENDING for retry; if False, mark as FAILED
+            
+        Returns:
+            Recovered job
+        """
+        # Release the lease
+        job.worker_id = None
+        job.heartbeat_at = None
+        job.lease_expires_at = None
+        
+        if retry and job.can_retry():
+            # Reset to pending for retry
+            job.status = JobStatus.PENDING
+            job.retry_count += 1
+            job.error_message = f"Job recovered from zombie state. Previous worker may have crashed."
+        else:
+            # Mark as failed
+            job.status = JobStatus.FAILED
+            job.completed_at = datetime.utcnow()
+            job.error_message = f"Job failed: worker crashed and max retries exceeded"
+        
+        await self.session.flush()
+        return job
+    
+    async def check_cancellation_requested(self, job_id: uuid.UUID) -> bool:
+        """
+        Check if cancellation has been requested for a job
+        
+        This is called periodically by running jobs to check if they should stop.
+        
+        Args:
+            job_id: Job ID to check
+            
+        Returns:
+            True if job status is CANCELLED, False otherwise
+        """
+        result = await self.session.execute(
+            select(Job.status)
+            .where(Job.id == job_id)
+        )
+        row = result.first()
+        
+        if not row:
+            return False
+        
+        return row[0] == JobStatus.CANCELLED
