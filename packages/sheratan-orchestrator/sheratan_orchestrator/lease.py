@@ -17,7 +17,7 @@ class LeaseState:
         )
 
     def renew(self):
-        # Konservativ: erneuert Lease relativ zu jetzt (now + duration)
+        # Conservative: renews lease relative to now (now + duration)
         self.lease_expires_at = time.time() + self.lease_duration_seconds
         return self.lease_expires_at
 
