@@ -83,7 +83,7 @@ class Logbook:
     def lease_renewed(self, worker_id: str, job_id: int, lease_expires_at: str, **kw):
         self.append(self._event("LeaseRenewed", "DEBUG", worker_id, job_id, None, lease_expires_at=lease_expires_at, **kw))
 
-    def lease_expired(self, worker_id: str, job_id: int, expired_at: str, grace_applied_seconds: Optional[float] = None, **kw):
+    def lease_expired(self, worker_id: Optional[str], job_id: int, expired_at: str, grace_applied_seconds: Optional[float] = None, **kw):
         self.append(self._event("LeaseExpired", "WARN", worker_id, job_id, None, expired_at=expired_at, grace_applied_seconds=grace_applied_seconds, **kw))
 
     # NEU: Laufzeit-/Runtime-Event (periodische Statusmeldung)
