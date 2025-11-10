@@ -44,6 +44,8 @@ class Logbook:
             try:
                 self._stream_queue.put_nowait(ev)
             except asyncio.QueueFull:
+                # If the stream queue is full, drop the event.
+                # This is intentional: the logbook is best-effort and should not block or raise.
                 pass
 
     # Convenience-APIs für typische Events
