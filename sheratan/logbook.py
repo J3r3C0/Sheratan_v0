@@ -106,6 +106,7 @@ class Logbook:
             try:
                 await self._stream_task
             except asyncio.CancelledError:
+                # Task cancellation is expected here; no action needed.
                 pass
         self._stream_task = None
         self._stream_queue = None
