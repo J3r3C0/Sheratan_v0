@@ -12,7 +12,7 @@ from .lease import LeaseState  # noqa: F401
 # If available in your tree, expose the JobManager as well
 try:  # pragma: no cover
     from .job_manager import JobManager  # noqa: F401
-except Exception:
+except (ImportError, ModuleNotFoundError):
     JobManager = None  # type: ignore
 
 __all__ = [
